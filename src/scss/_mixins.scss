@@ -1,0 +1,55 @@
+@mixin respond-to($breakpoint) {
+  @if $breakpoint == 'sm' {
+    @media (min-width: 576px) { @content; }
+  } @else if $breakpoint == 'md' {
+    @media (min-width: 768px) { @content; }
+  } @else if $breakpoint == 'lg' {
+    @media (min-width: 992px) { @content; }
+  } @else if $breakpoint == 'xl' {
+    @media (min-width: 1200px) { @content; }
+  }
+}
+
+@mixin glass-panel($bg: rgba(255, 255, 255, 0.08), $blur: blur(12px), $border: rgba(255, 255, 255, 0.18), $shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.2), $text: #ffffff) {
+  background: $bg;
+  backdrop-filter: $blur;
+  -webkit-backdrop-filter: $blur;
+  border: 1px solid $border;
+  border-radius: 16px;
+  box-shadow: $shadow;
+  color: $text;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 0;
+}
+
+@mixin custom-scrollbar($width: 6px, $height: 6px, $thumb-bg: rgba(173, 216, 230, 0.3), $track-bg: rgba(255, 255, 255, 0.03)) {
+  scrollbar-width: thin;
+  scrollbar-color: $thumb-bg $track-bg;
+
+  &::-webkit-scrollbar {
+    width: $width;
+    height: $height;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: $track-bg;
+    border-radius: 10px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: $thumb-bg;
+    border-radius: 10px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+
+    &:hover {
+      background: rgba(173, 216, 230, 0.55);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+  }
+}
+
+@mixin flex-center {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
