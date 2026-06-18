@@ -14,6 +14,107 @@ import {
   mapIconCodeToType
 } from './utils/weatherHelpers';
 
+const DEFAULT_WEATHER_TOKYO = {
+  city: 'Tokyo',
+  temp: 22,
+  feelsLike: 22,
+  humidity: '60%',
+  wind: '14 km/h',
+  pressure: 1012,
+  sunrise: '04:50 AM',
+  sunset: '06:45 PM',
+  clouds: 30,
+  condition: 'Clear Sky',
+  icon: 'bi-sun text-warning',
+  type: 'sunny',
+  isNight: false
+};
+
+const DEFAULT_FORECAST_TOKYO = Array.from({ length: 40 }).map((_, i) => {
+  const dt = Math.floor(Date.now() / 1000) + i * 10800;
+  return {
+    dt,
+    main: {
+      temp: 20 + Math.sin(i / 2) * 3,
+      feels_like: 20 + Math.sin(i / 2) * 3,
+      temp_min: 17,
+      temp_max: 23,
+      pressure: 1012,
+      humidity: 60 + Math.round(Math.sin(i / 3) * 10)
+    },
+    weather: [{
+      id: 800,
+      main: 'Clear',
+      description: 'clear sky',
+      icon: '01d'
+    }],
+    wind: { speed: 3.5, deg: 180 },
+    dt_txt: new Date(dt * 1000).toISOString().replace('T', ' ').slice(0, 19)
+  };
+});
+
+function getCachedWeatherData(city) {
+  if (!city) return null;
+  const keyCurrent = `skyflow_cache_${city.toLowerCase()}_current`;
+  const keyForecast = `skyflow_cache_${city.toLowerCase()}_forecast`;
+  const cachedCurrent = localStorage.getItem(keyCurrent);
+  const cachedForecast = localStorage.getItem(keyForecast);
+
+  if (cachedCurrent && cachedForecast) {
+    try {
+      const currentData = JSON.parse(cachedCurrent).data;
+      const forecastData = JSON.parse(cachedForecast).data;
+
+      const temp = Math.round(currentData.main.temp);
+      const feelsLike = Math.round(currentData.main.feels_like);
+      const humidity = `${currentData.main.humidity}%`;
+      const windSpeedKmH = Math.round(currentData.wind.speed * 3.6);
+      const wind = `${windSpeedKmH} km/h`;
+      const description = currentData.weather[0].description;
+      const iconCode = currentData.weather[0].icon;
+
+      const sunriseTime = new Date((currentData.sys.sunrise + currentData.timezone) * 1000)
+        .toUTCString().slice(17, 22);
+      const sunsetTime = new Date((currentData.sys.sunset + currentData.timezone) * 1000)
+        .toUTCString().slice(17, 22);
+
+      return {
+        weather: {
+          city: currentData.name,
+          temp,
+          feelsLike,
+          humidity,
+          wind,
+          pressure: currentData.main.pressure,
+          sunrise: `${sunriseTime} AM`,
+          sunset: `${sunsetTime} PM`,
+          clouds: currentData.clouds.all,
+          condition: description.charAt(0).toUpperCase() + description.slice(1),
+          icon: getIconForWeather(iconCode, temp),
+          type: mapIconCodeToType(iconCode),
+          isNight: iconCode.endsWith('n')
+        },
+        forecastList: forecastData.list,
+        timezoneOffset: currentData.timezone,
+        bodyClass: mapIconToBodyClass(iconCode)
+      };
+    } catch (e) {
+      return null;
+    }
+  }
+
+  if (city.toLowerCase() === 'tokyo') {
+    return {
+      weather: DEFAULT_WEATHER_TOKYO,
+      forecastList: DEFAULT_FORECAST_TOKYO,
+      timezoneOffset: 32400,
+      bodyClass: 'weather__sunny'
+    };
+  }
+
+  return null;
+}
+
 function App() {
   const [favorites, setFavorites] = useState(() => {
     const saved = localStorage.getItem('skyflow_favorites');
@@ -32,13 +133,32 @@ function App() {
 
   const [activeView, setActiveView] = useState('current');
 
-  const [currentWeather, setCurrentWeather] = useState(null);
-  const [forecastList, setForecastList] = useState([]);
-  const [timezoneOffset, setTimezoneOffset] = useState(0);
+  const [currentWeather, setCurrentWeather] = useState(() => {
+    const active = localStorage.getItem('skyflow_active_city') || 'Tokyo';
+    const cached = getCachedWeatherData(active);
+    return cached ? cached.weather : null;
+  });
+
+  const [forecastList, setForecastList] = useState(() => {
+    const active = localStorage.getItem('skyflow_active_city') || 'Tokyo';
+    const cached = getCachedWeatherData(active);
+    return cached ? cached.forecastList : [];
+  });
+
+  const [timezoneOffset, setTimezoneOffset] = useState(() => {
+    const active = localStorage.getItem('skyflow_active_city') || 'Tokyo';
+    const cached = getCachedWeatherData(active);
+    return cached ? cached.timezoneOffset : 0;
+  });
 
   const [favoritesWeatherData, setFavoritesWeatherData] = useState({});
 
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    const active = localStorage.getItem('skyflow_active_city') || 'Tokyo';
+    const cached = getCachedWeatherData(active);
+    return !cached;
+  });
+  
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -52,6 +172,13 @@ function App() {
   useEffect(() => {
     localStorage.setItem('skyflow_is_celsius', JSON.stringify(isCelsius));
   }, [isCelsius]);
+
+  useEffect(() => {
+    const cached = getCachedWeatherData(activeCity);
+    if (cached) {
+      document.body.className = cached.bodyClass;
+    }
+  }, []);
 
   const fetchWithCache = async (url, cacheSubKey) => {
     const key = `skyflow_cache_${cacheSubKey.toLowerCase()}`;
@@ -82,7 +209,9 @@ function App() {
 
   useEffect(() => {
     async function fetchActiveCityWeather() {
-      setLoading(true);
+      if (!currentWeather || currentWeather.city.toLowerCase() !== activeCity.toLowerCase()) {
+        setLoading(true);
+      }
       setError(null);
       try {
         const currentWeatherUrl = `https://api.openweathermap.org/data/2.5/weather?q=${encodeURIComponent(activeCity)}&appid=${API_KEY}&units=metric`;
